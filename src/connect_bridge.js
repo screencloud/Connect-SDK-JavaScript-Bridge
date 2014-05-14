@@ -80,6 +80,7 @@ var connectsdk = (function () {
             PlatformType: {
                 DEFAULT: "Default",
                 GOOGLE_CAST: "GoogleCast",
+                SAMSUNG_MULTISCREEN_SDK: "SamsungMultiScreenSDK",
                 WEBOS_NATIVE: "WebOSNative",
                 WEBOS_WEB_APP: "WebOSWebApp"
             },
@@ -164,6 +165,10 @@ var connectsdk = (function () {
                     this.platformType = ConnectManager.PlatformType.WEBOS_NATIVE;
                 else
                     this.platformType = ConnectManager.PlatformType.WEBOS_WEB_APP;
+            }
+            else if (userAgent.indexOf('smarthub') >= 0 && userAgent.indexOf('smart-tv') >= 0)
+            {
+                this.platformType = ConnectManager.PlatformType.SAMSUNG_MULTISCREEN_SDK;
             }
             return this.platformType;
         },
@@ -382,6 +387,78 @@ var connectsdk = (function () {
                     window.castMessageBus.broadcast(messageString);
             }
         }
+    };
+    
+    platforms.SamsungMultiScreenSDK = {
+        name: "MultiScreen SDK",
+        interactive: false,
+        init: function () {
+
+            window.multiScreenDevice = null;
+            window.multiScreenClient = null;
+            window.multiScreenChannel = null;
+                  
+            window.multiScreenChannelId = "urn:x-cast:com.connectsdk";
+            window.multiScreenAttribute = {name: "host"};
+                  
+            window.webapis.multiscreen.Device.getCurrent(this.onDeviceRetrieved.bind(this), function(error) {
+                console.log("Failed to get current device: " + error);
+            });
+        },
+
+        onDeviceRetrieved: function(device) {
+            window.multiScreenDevice = device;
+
+            this.connectToChannel();
+        },
+             
+        connectToChannel: function() {
+            window.multiScreenDevice.openChannel(window.multiScreenChannelId, window.multiScreenAttribute, this.onConnect.bind(this), function(error) {
+                console.log("Failed to open channel: " + error);
+            });
+        },
+                  
+        onConnect: function(channel) {
+            window.multiScreenChannel = channel;
+            
+            window.multiScreenChannel.on("disconnect", this.onDisconnect.bind(this));
+            window.multiScreenChannel.on("clientConnect", this.onClientConnect.bind(this));
+            window.multiScreenChannel.on("clientDisconnect", this.onClientDisconnect.bind(this));
+            window.multiScreenChannel.on("message", this.onMessage.bind(this));
+        },
+                  
+        onDisconnect: function(client) {
+            window.multiScreenChannel = null;
+        },
+                  
+        onClientConnect: function(client) {
+            window.multiScreenClient = client;
+        },
+                  
+        onClientDisconnect: function(client) {
+            window.multiScreenClient = null;
+        },
+                  
+        onMessage: function(msg, client) {
+
+            var message;
+            try {
+                message = JSON.parse(msg);
+            } catch (ex) {
+                message = msg;
+            }
+                  
+            this.emit("message", { from: client.id, message: message });
+        },
+		
+        sendMessage: function(to, message) {
+            window.multiScreenClient.send(JSON.stringify(message), true);
+        },
+                  
+        broadcastMessage: function(message) {
+            window.multiScreenChannel.broadcast(message);
+        }
+
     }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
